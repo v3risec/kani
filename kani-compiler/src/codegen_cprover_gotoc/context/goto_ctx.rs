@@ -17,7 +17,9 @@
 use super::current_fn::CurrentFnCtx;
 use super::vtable_ctx::VtableCtx;
 use crate::codegen_cprover_gotoc::UnsupportedConstructs;
-use crate::codegen_cprover_gotoc::overrides::{GotocHooks, fn_hooks};
+use crate::codegen_cprover_gotoc::overrides::{
+    GotocHooks, QUANTIFIER_SAFETY_CHECK_ERROR, fn_hooks, has_quantifier_safety_check,
+};
 use crate::codegen_cprover_gotoc::utils::full_crate_name;
 use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_queries::QueryDb;
@@ -968,6 +970,14 @@ impl GotocCtx<'_, '_> {
                             "Detected recursions in the usage of quantifiers."
                         );
                         visited_func_symbols.insert(*identifier);
+
+                        // All callee bodies are available here, including inline(never) helpers.
+                        if !self.queries.args().ub_check.is_empty()
+                            && has_quantifier_safety_check(function_body)
+                        {
+                            self.tcx.dcx().err(QUANTIFIER_SAFETY_CHECK_ERROR.to_owned());
+                            self.tcx.dcx().abort_if_errors();
+                        }
 
                         let inlined_body: &Stmt = function_body;
                         let mut stmts_of_inlined_body: Vec<Stmt> =
